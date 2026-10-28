@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "whichmodel"
+version = "0.0.1"
+description = "Estimate which model family wrote a text, with the features that drove the guess."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+whichmodel = "whichmodel.cli:main"
+
+[tool.setuptools]
+packages = ["whichmodel"]
+
+[tool.setuptools.package-data]
+whichmodel = ["model.json"]

@@ -1,0 +1,12 @@
+[
+  {"family": "gemma",   "backend": "llama", "model": "gemma-4-12b"},
+  {"family": "gemma",   "backend": "llama", "model": "gemma-4-e4b-it-q4-k-m"},
+  {"family": "qwen",    "backend": "llama", "model": "qwen3.6-35b-a3b-ud-q6-k"},
+  {"family": "qwen",    "backend": "llama", "model": "qwen3.8-27b-ud-iq4-xs"},
+  {"family": "mistral", "backend": "llama", "model": "ministral-3-3b-instruct-2512-q4-k-m"},
+  {"family": "mistral", "backend": "llama", "model": "hearthfire-24b-q4-k-s", "note": "Mistral-Small-24B-architecture finetune (assumed base)"},
+
+  {"family": "claude",  "backend": "anthropic", "model": "claude-sonnet-5-5",  "optional": true},
+  {"family": "gpt",     "backend": "openai",    "model": "gpt-5",              "optional": true},
+  {"family": "gemini",  "backend": "gemini",    "model": "gemini-2.5-flash",   "optional": true}
+]
