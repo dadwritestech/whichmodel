@@ -97,6 +97,21 @@ class ClassifierTests(unittest.TestCase):
         names = [n for n, _, _ in r["for"]]
         self.assertTrue(any(n.startswith("style:") for n in names), names)
 
+    def test_temperature_softens_but_keeps_top_guess(self):
+        rows = toy_corpus()
+        m = train([r["text"] for r in rows], [r["family"] for r in rows], epochs=20)
+        t = rows[0]["text"]
+        sharp = m.predict_proba(t)
+        m.temperature = 4.0
+        soft = m.predict_proba(t)
+        self.assertEqual(max(sharp, key=sharp.get), max(soft, key=soft.get))
+        self.assertLess(max(soft.values()), max(sharp.values()))
+
+    def test_fit_temperature_cools_overconfident_logits(self):
+        # Confident logits that are right only half the time -> T well above 1.
+        oof = [([10.0, 0.0], 0), ([10.0, 0.0], 1)] * 10
+        self.assertGreater(evaluate.fit_temperature(oof), 5)
+
     def test_save_load_roundtrip(self):
         rows = toy_corpus(10)
         m = train([r["text"] for r in rows], [r["family"] for r in rows], epochs=5)

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
 import sys
 from collections import Counter, defaultdict
@@ -24,7 +25,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 from whichmodel import features as F  # noqa: E402
-from whichmodel.classifier import train  # noqa: E402
+from whichmodel.classifier import softmax, train  # noqa: E402
 
 
 def load(path: Path) -> list[dict]:
@@ -57,8 +58,11 @@ def score(model, rows: list[dict], cut: int | None = None) -> tuple[int, list[tu
     return sum(a == b for a, b in pairs), pairs
 
 
-def cv(rows, k=5, cuts=(None,), **kw):
-    """Prompt-grouped CV. Returns {cut: (correct, total, pairs)}."""
+def cv(rows, k=5, cuts=(None,), oof=None, **kw):
+    """Prompt-grouped CV. Returns {cut: (correct, total, pairs)}.
+
+    If `oof` is a list, out-of-fold (logits, true class index) pairs for the
+    full texts are appended to it, for calibration."""
     res = {c: [0, 0, []] for c in cuts}
     for test_p in folds_by_prompt(rows, k):
         tr = [r for r in rows if r["prompt_id"] not in test_p]
@@ -69,7 +73,35 @@ def cv(rows, k=5, cuts=(None,), **kw):
             res[c][0] += ok
             res[c][1] += len(te)
             res[c][2] += pairs
+        if oof is not None:
+            oof += [(m.logits(r["text"]), m.classes.index(r["family"])) for r in te]
     return res
+
+
+def nll(oof, T: float) -> float:
+    return -sum(math.log(max(softmax([v / T for v in z])[y], 1e-12)) for z, y in oof) / len(oof)
+
+
+def fit_temperature(oof) -> float:
+    grid = [0.5 + 0.25 * i for i in range(79)]  # 0.5 .. 20
+    return min(grid, key=lambda T: nll(oof, T))
+
+
+def calibration(oof, T: float) -> list[tuple[str, int, float, float]]:
+    """(confidence band, n, mean confidence, accuracy) on out-of-fold predictions."""
+    bands = [(0.0, 0.5), (0.5, 0.7), (0.7, 0.9), (0.9, 1.01)]
+    out = []
+    for lo, hi in bands:
+        sel = []
+        for z, y in oof:
+            p = softmax([v / T for v in z])
+            top = max(range(len(p)), key=p.__getitem__)
+            if lo <= p[top] < hi:
+                sel.append((p[top], top == y))
+        if sel:
+            out.append((f"{lo:.0%}-{min(hi, 1):.0%}", len(sel), sum(c for c, _ in sel) / len(sel),
+                        sum(ok for _, ok in sel) / len(sel)))
+    return out
 
 
 def lomo(rows, **kw):
@@ -124,13 +156,18 @@ def main(argv=None) -> int:
     print(f"{len(rows)} samples, {len(classes)} families: {dict(fam_n)}", flush=True)
 
     cuts = (None, 200, 100, 50, 25)
-    full = cv(rows, cuts=cuts)
+    oof: list = []
+    full = cv(rows, cuts=cuts, oof=oof)
+    T = fit_temperature(oof)
     print("full CV done", flush=True)
     abl = {}
     if not args.quick:
         abl["style only"] = cv(rows, use_words=False)[None]
         abl["words only"] = cv(rows, use_style=False)[None]
         print("ablations done", flush=True)
+    # Same pipeline, but the label is the exact model instead of the family.
+    exact = cv([{**r, "family": r["model"]} for r in rows])[None]
+    print("exact-model CV done", flush=True)
     lo = lomo(rows)
     print("leave-one-model-out done", flush=True)
 
@@ -150,6 +187,8 @@ def main(argv=None) -> int:
     lo_ok = sum(v["correct"] for v in lo.values())
     lo_tot = sum(v["total"] for v in lo.values())
     md.append(f"| **Unseen model** (leave-one-model-out, held-out prompts) | **{pct(lo_ok, lo_tot)}** | {lo_tot} |")
+    md.append(f"| Exact model ({len(by_model)}-way, held-out prompts; baseline "
+              f"{100 * max(by_model.values()) / len(rows):.1f}%) | {pct(exact[0], exact[1])} | {exact[1]} |")
     md += ["", "## Per family (full model, held-out prompts)", "",
            "| True \\ Guessed | " + " | ".join(classes) + " | Recall |",
            "|---" * (len(classes) + 2) + "|"]
@@ -167,8 +206,18 @@ def main(argv=None) -> int:
         a, b, _ = full[c]
         md.append(f"| {c or 'full (median ' + str(sorted(len(F.words(r['text'])) for r in rows)[len(rows) // 2]) + ')'} | {pct(a, b)} |")
 
+    md += ["", "## Calibration: does \"80%\" mean right 80% of the time?", "",
+           f"Out-of-fold predictions. The shipped model divides logits by T = {T:.2f}, fitted on these "
+           "same out-of-fold predictions (it changes confidence, never the top guess).", "",
+           "| Top-guess confidence | n | Mean confidence | Actual accuracy |", "|---|---|---|---|"]
+    for label, n, conf_, acc in calibration(oof, 1.0):
+        md.append(f"| raw {label} | {n} | {conf_:.0%} | {acc:.0%} |")
+    for label, n, conf_, acc in calibration(oof, T):
+        md.append(f"| calibrated {label} | {n} | {conf_:.0%} | {acc:.0%} |")
+
     # Final model on everything, plus its strongest features per family.
     final = train([r["text"] for r in rows], [r["family"] for r in rows])
+    final.temperature = T
     final.meta = {"samples": len(rows), "models": dict(by_model), "cv_accuracy": ok / tot,
                   "unseen_model_accuracy": lo_ok / lo_tot if lo_tot else None}
     final.save(Path(args.model_out))
@@ -188,6 +237,8 @@ def main(argv=None) -> int:
         "majority_baseline": majority,
         "cv": {str(c): full[c][0] / full[c][1] for c in cuts},
         "ablations": {k: a / b for k, (a, b, _) in abl.items()},
+        "exact_model_cv": exact[0] / exact[1],
+        "temperature": T, "nll_raw": nll(oof, 1.0), "nll_calibrated": nll(oof, T),
         "leave_one_model_out": lo,
         "confusion": {f: dict(conf[f]) for f in classes},
     }, indent=2), encoding="utf-8")

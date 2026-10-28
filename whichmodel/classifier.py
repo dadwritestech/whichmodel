@@ -23,8 +23,12 @@ def softmax(z: list[float]) -> list[float]:
 
 class Model:
     def __init__(self, classes: list[str], names: list[str], scale: list[float],
-                 W: list[list[float]], b: list[float], vocab: list[str], meta: dict | None = None):
+                 W: list[list[float]], b: list[float], vocab: list[str], meta: dict | None = None,
+                 temperature: float = 1.0):
         self.classes, self.names, self.scale = classes, names, scale
+        # Logits are divided by this before softmax. Fit on out-of-fold
+        # predictions (evaluate.py) so that "70%" means right ~70% of the time.
+        self.temperature = temperature
         self.W, self.b, self.vocab = W, b, vocab
         self.meta = meta or {}
         self.index = {n: i for i, n in enumerate(names)}
@@ -41,14 +45,20 @@ class Model:
     def _logits(self, x: list[tuple[int, float]]) -> list[float]:
         return [self.b[c] + sum(self.W[c][i] * v for i, v in x) for c in range(len(self.classes))]
 
+    def logits(self, text: str) -> list[float]:
+        return self._logits(self.vectorize(F.extract(text, self.vocab)))
+
+    def _proba(self, z: list[float]) -> list[float]:
+        return softmax([v / self.temperature for v in z])
+
     def predict_proba(self, text: str) -> dict[str, float]:
-        p = softmax(self._logits(self.vectorize(F.extract(text, self.vocab))))
+        p = self._proba(self.logits(text))
         return dict(zip(self.classes, p))
 
     def explain(self, text: str, top: int = 6) -> dict:
         feats = F.extract(text, self.vocab)
         x = self.vectorize(feats)
-        p = softmax(self._logits(x))
+        p = self._proba(self._logits(x))
         best = max(range(len(p)), key=p.__getitem__)
         # How much each feature raises log p(best): its weight for `best` minus
         # the probability-weighted average weight, times its value.
@@ -71,12 +81,14 @@ class Model:
             "classes": self.classes, "names": self.names, "scale": self.scale,
             "W": [[round(w, 5) for w in row] for row in self.W],
             "b": [round(v, 5) for v in self.b], "vocab": self.vocab, "meta": self.meta,
+            "temperature": self.temperature,
         }), encoding="utf-8")
 
     @classmethod
     def load(cls, path: Path) -> "Model":
         d = json.loads(Path(path).read_text(encoding="utf-8"))
-        return cls(d["classes"], d["names"], d["scale"], d["W"], d["b"], d["vocab"], d.get("meta"))
+        return cls(d["classes"], d["names"], d["scale"], d["W"], d["b"], d["vocab"], d.get("meta"),
+                   d.get("temperature", 1.0))
 
 
 def train(texts: list[str], labels: list[str], *, use_style: bool = True, use_words: bool = True,

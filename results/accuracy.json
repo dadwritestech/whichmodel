@@ -1,0 +1,111 @@
+{
+  "samples": 600,
+  "families": {
+    "gemma": 200,
+    "qwen": 200,
+    "mistral": 200
+  },
+  "models": {
+    "gemma-4-12b": 100,
+    "gemma-4-e4b-it-q4-k-m": 100,
+    "qwen3.6-35b-a3b-ud-q6-k": 100,
+    "qwen3.8-27b-ud-iq4-xs": 100,
+    "ministral-3-3b-instruct-2512-q4-k-m": 100,
+    "hearthfire-24b-q4-k-s": 100
+  },
+  "majority_baseline": 0.3333333333333333,
+  "cv": {
+    "None": 0.6683333333333333,
+    "200": 0.6716666666666666,
+    "100": 0.6333333333333333,
+    "50": 0.565,
+    "25": 0.5183333333333333
+  },
+  "ablations": {
+    "style only": 0.6666666666666666,
+    "words only": 0.605
+  },
+  "exact_model_cv": 0.49,
+  "temperature": 3.75,
+  "nll_raw": 1.3339115227019838,
+  "nll_calibrated": 0.7306539314892493,
+  "leave_one_model_out": {
+    "gemma-4-12b": {
+      "family": "gemma",
+      "correct": 30,
+      "total": 100,
+      "guesses": {
+        "qwen": 63,
+        "mistral": 7,
+        "gemma": 30
+      }
+    },
+    "gemma-4-e4b-it-q4-k-m": {
+      "family": "gemma",
+      "correct": 46,
+      "total": 100,
+      "guesses": {
+        "qwen": 48,
+        "gemma": 46,
+        "mistral": 6
+      }
+    },
+    "hearthfire-24b-q4-k-s": {
+      "family": "mistral",
+      "correct": 19,
+      "total": 100,
+      "guesses": {
+        "qwen": 55,
+        "mistral": 19,
+        "gemma": 26
+      }
+    },
+    "ministral-3-3b-instruct-2512-q4-k-m": {
+      "family": "mistral",
+      "correct": 24,
+      "total": 100,
+      "guesses": {
+        "qwen": 59,
+        "gemma": 17,
+        "mistral": 24
+      }
+    },
+    "qwen3.6-35b-a3b-ud-q6-k": {
+      "family": "qwen",
+      "correct": 35,
+      "total": 100,
+      "guesses": {
+        "gemma": 35,
+        "qwen": 35,
+        "mistral": 30
+      }
+    },
+    "qwen3.8-27b-ud-iq4-xs": {
+      "family": "qwen",
+      "correct": 37,
+      "total": 100,
+      "guesses": {
+        "gemma": 34,
+        "mistral": 29,
+        "qwen": 37
+      }
+    }
+  },
+  "confusion": {
+    "gemma": {
+      "qwen": 49,
+      "gemma": 145,
+      "mistral": 6
+    },
+    "mistral": {
+      "qwen": 41,
+      "mistral": 141,
+      "gemma": 18
+    },
+    "qwen": {
+      "gemma": 51,
+      "qwen": 115,
+      "mistral": 34
+    }
+  }
+}
