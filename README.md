@@ -175,3 +175,8 @@ closest is academic. Most "fingerprinting" repos need to query the model itself.
 2. Collect two or more models per vendor, from different sizes and generations, so the classifier can learn
    what a family shares rather than what one checkpoint does.
 3. Run the leave-one-model-out test again. It is the number that matters for "which family".
+
+## License
+
+- **Code:** [Apache-2.0](LICENSE).
+- **Data** (`data/`, `results/`): [CC BY 4.0](DATA_LICENSE).
